@@ -76,8 +76,8 @@ metadata:
   name: scalable-role
   namespace: mindbox
 rules:
-  - apiGroups: ["*"]
-    resources: ["*"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "deployments/scale"]
     verbs: ["*"]
 ...
 
