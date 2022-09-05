@@ -58,3 +58,98 @@ spec:
                     values:
                       - scalable-with-cronjob
 ...
+
+# Создаём ServiceAccount под которым будем менять количество запущенных подов
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: scalable-sa
+  namespace: mindbox
+...
+
+# Создаём роль для него
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: scalable-role
+  namespace: mindbox
+rules:
+  - apiGroups: ["*"]
+    resources: ["*"]
+    verbs: ["*"]
+...
+
+# Предоставляем права, указаныне в роли, севисаккаунту
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: scalable-rb
+  namespace: mindbox
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: scalable-role
+subjects:
+  - apiGroup: ""
+    kind: ServiceAccount
+    name: scalable-sa
+...
+
+# Запланируем запуск дополнительных подов в 10:00 МСК-3 (UTS)
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  labels:
+    app: scaler-up
+  name: scaler-up
+  namespace: mindbox
+spec:
+  schedule: "0 10 * * *"
+  jobTemplate:
+    metadata:
+      labels:
+        app: scaler
+    spec:
+      template:
+        spec:
+          serviceAccountName: scalable-sa
+          automountServiceAccountToken: true
+          restartPolicy: OnFailure
+          containers:
+            - name: scalable-up
+              image: bitnami/kubectl
+              command: ["kubectl"]
+              args: ["scale", "deployment", "scalable-with-cronjob", "--replicas", "4"]
+...
+
+# Запланируем удаление лишних подов в 20:00 МСК-3 (UTS)
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  labels:
+    app: scaler-down
+  name: scaler-down
+  namespace: mindbox
+spec:
+  schedule: "0 20 * * *"
+  jobTemplate:
+    metadata:
+      labels:
+        app: scaler
+    spec:
+      template:
+        spec:
+          serviceAccountName: scalable-sa
+          automountServiceAccountToken: true
+          restartPolicy: OnFailure
+          containers:
+            - name: scalable-up
+              image: bitnami/kubectl
+              command: ["kubectl"]
+              args: ["scale", "deployment", "scalable-with-cronjob", "--replicas", "1"]
+...
