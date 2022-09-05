@@ -5,3 +5,56 @@ kind: Namespace
 metadata:
   name: mindbox
 ...
+
+# Для примера приложения возьмём образ nginx версии 1.13.
+# Приложение будет запускаться в одном экземпляре.
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: application
+  name: scalable-with-cronjob
+  namespace: mindbox
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      containers:
+        - name: backend
+          image: nginx:1.13
+          resources:
+            limits:
+              memory: 128Mi
+              cpu: 0.5 # Это много больше, чем необходимые 0.1
+            requests:
+              memory: 128Mi
+              cpu: 0.1
+          startupProbe:
+            httpGet:
+              path: /
+              port: 80
+            # Приолжению требуется 5-10 секунд для старта.
+            # Значит, будем проверять состояние приложения каждые 2 секунды.
+            # Всего будет допустимо 5 проваленных проверок.
+            # Если через 12 секунд под не запустится, то он будет убит и запущен заново
+            periodSeconds: 2
+            failureThreshold: 5
+      affinity:
+        # Реазиуем максимальную отказоустойчивость путём запрета запуска двух подов на одной ноде
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchExpressions:
+                  - key: app
+                    operator: In
+                    values:
+                      - scalable-with-cronjob
+...
